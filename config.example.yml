@@ -1,0 +1,12 @@
+---
+listen_port: 9000
+beeline_api: https://my.beeline.ru/api/1.0/
+accounts:
+  account_1:
+    login: 9091234567
+    password: superpass
+  account_2:
+    login: 9099876543
+    password: megapass
+debug: false
+...
