@@ -1,6 +1,7 @@
 ---
 listen_port: 9000
 beeline_api: https://my.beeline.ru/api/1.0/
+fake_data_retries: 50
 accounts:
   account_1:
     login: 9091234567

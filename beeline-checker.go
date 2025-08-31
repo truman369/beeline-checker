@@ -20,10 +20,11 @@ const CFGFILE string = "config.yml"
 
 // Config struct
 type Config struct {
-    ListenPort int32              `yaml:"listen_port"`
-    BeelineAPI string             `yaml:"beeline_api"`
-    Accounts   map[string]Account `yaml:"accounts"`
-    DebugMode  bool               `yaml:"debug"`
+    ListenPort      int32              `yaml:"listen_port"`
+    BeelineAPI      string             `yaml:"beeline_api"`
+    FakeDataRetries int                `yaml:"fake_data_retries"`
+    Accounts        map[string]Account `yaml:"accounts"`
+    DebugMode       bool               `yaml:"debug"`
 }
 
 // Account struct
@@ -247,14 +248,30 @@ func getSummary(accName string) (Summary, error) {
     // check plan and add counters from different endpoint
     resp, err = apiGet("info/pricePlan", map[string]string{"ctn": strconv.FormatInt(acc.Login, 10), "token": acc.Token})
     if err == nil && resp["pricePlanInfo"].(map[string]interface{})["name"].(string) == "VYOUNG" {
-        resp, err = apiGet("info/accumulators", map[string]string{"ctn": strconv.FormatInt(acc.Login, 10), "token": acc.Token})
-        if err == nil {
-            for _, v := range resp["accumulators"].([]interface{}) {
-                tmp := v.(map[string]interface{})
-                if tmp["soc"] == "VYOUNG" {
-                    res.Gigabytes = tmp["rest"].(float64) / (1024 * 1024)
+        // workaround when sometimes api returns fake value 192000 kbytes
+        isFake := true
+        retry := 0
+        for isFake {
+            retry++
+            resp, err = apiGet("info/accumulators", map[string]string{"ctn": strconv.FormatInt(acc.Login, 10), "token": acc.Token})
+            if err == nil {
+                for _, v := range resp["accumulators"].([]interface{}) {
+                    tmp := v.(map[string]interface{})
+                    if tmp["soc"] == "VYOUNG" {
+                        if tmp["rest"].(float64) != 192000 {
+                            isFake = false
+                            res.Gigabytes = tmp["rest"].(float64) / (1024 * 1024)
+                        } else {
+                            logDebug(fmt.Sprintf("Fake gygabytes received on %d retry", retry))
+                            if retry == CFG.FakeDataRetries {
+                                logWarning(fmt.Sprintf("Failed to get gigabytes after %d retries", retry))
+                                break
+                            }
+                        }
+                    }
                 }
             }
+
         }
     }
 
