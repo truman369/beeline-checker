@@ -229,19 +229,35 @@ func getSummary(accName string) (Summary, error) {
     res.Status = resp["status"].(string)
 
     // get counters
-    resp, err = apiGet("info/prepaidAddBalance", map[string]string{"ctn": strconv.FormatInt(acc.Login, 10), "token": acc.Token})
-    if err == nil {
-        if resp["balanceTime"] != nil {
-            tmp := resp["balanceTime"].([]interface{})[0]
-            res.Minutes = tmp.(map[string]interface{})["value"].(float64) / 60
-        }
-        if resp["balanceSMS"] != nil {
-            tmp := resp["balanceSMS"].([]interface{})[0]
-            res.SMS = tmp.(map[string]interface{})["value"].(float64)
-        }
-        if resp["balanceData"] != nil {
-            tmp := resp["balanceData"].([]interface{})[0]
-            res.Gigabytes = tmp.(map[string]interface{})["value"].(float64) / (1024 * 1024 * 1024)
+    // workaround for fake data returning
+    isFake := true
+    retry := 0
+    for isFake {
+        retry++
+        resp, err = apiGet("info/prepaidAddBalance", map[string]string{"ctn": strconv.FormatInt(acc.Login, 10), "token": acc.Token})
+        if err == nil {
+            // check fake response
+            if resp["balanceMonet"] == nil {
+                isFake = false
+                if resp["balanceTime"] != nil {
+                    tmp := resp["balanceTime"].([]interface{})[0]
+                    res.Minutes = tmp.(map[string]interface{})["value"].(float64) / 60
+                }
+                if resp["balanceSMS"] != nil {
+                    tmp := resp["balanceSMS"].([]interface{})[0]
+                    res.SMS = tmp.(map[string]interface{})["value"].(float64)
+                }
+                if resp["balanceData"] != nil {
+                    tmp := resp["balanceData"].([]interface{})[0]
+                    res.Gigabytes = tmp.(map[string]interface{})["value"].(float64) / (1024 * 1024 * 1024)
+                }
+            } else {
+                logDebug(fmt.Sprintf("Fake balance counters received on %d retry", retry))
+                if retry == CFG.FakeDataRetries {
+                    logWarning(fmt.Sprintf("Failed to get balance counters after %d retries", retry))
+                    break
+                }
+            }
         }
     }
 
@@ -271,7 +287,6 @@ func getSummary(accName string) (Summary, error) {
                     }
                 }
             }
-
         }
     }
 
